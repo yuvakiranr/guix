@@ -50195,6 +50195,23 @@ Other useful kernel modules include those necessary for a
 @code{raid-device-mapping}, e.g. @code{raid1}, @code{raid456} and
 @code{raid10} (@pxref{Mapped Devices}).
 
+If a module listed in @code{initrd-modules} is not included in the
+Linux-libre kernel, then its location must be provided via the
+@code{kernel-loadable-modules} list.
+
+As an example, if you need the driver for a Realtek RTL8821CE wireless
+network adapter for mounting the root file system over NFS, your
+configuration might include the following:
+
+@lisp
+(operating-system
+  ;; @dots{}
+  (initrd-modules (cons "8821ce"
+                        (base-initrd-modules (operating-system-kernel
+                                              this-operating-system))))
+  (kernel-loadable-modules (list `(,rtl8821ce-linux-module "module"))))
+@end lisp
+
 @vindex %base-initrd-modules
 @deffn {Procedure} base-initrd-modules kernel [system]
 Return a list of modules tailored to @var{kernel} for @var{system} to

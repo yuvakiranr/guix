@@ -1384,6 +1384,19 @@ we're running in the final root."
                #:linux (operating-system-kernel os)
                #:linux-modules
                (operating-system-initrd-modules os)
+               #:linux-extra-module-directories
+               (let ((package-for-kernel
+                      (lambda (p)
+                        (package/inherit p
+                          (arguments
+                           (substitute-keyword-arguments arguments
+                             ((#:linux _ #f) (operating-system-kernel os))))))))
+                 (map (match-lambda
+                        ((? package? module)
+                         (package-for-kernel module))
+                        (((? package? module) output)
+                         (list (package-for-kernel module) output)))
+                      (operating-system-kernel-loadable-modules os)))
                #:mapped-devices mapped-devices
                #:keyboard-layout (operating-system-keyboard-layout os)))
 
