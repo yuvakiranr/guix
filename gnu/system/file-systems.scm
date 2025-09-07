@@ -68,6 +68,7 @@
             zfs-dataset-path
             zfs-dataset
             zfs-dataset->string
+            string->zfs-dataset
             btrfs-subvolume?
             btrfs-store-subvolume-file-name
 
@@ -231,6 +232,14 @@ flags are found."
         (string-append pool "/" path)
         pool)))
 
+(define (string->zfs-dataset str)
+  (let* ((slash (string-index str #\/))
+         (pool (if slash
+                   (substring str 0 slash)
+                   str))
+         (path (and slash (substring str (1+ slash)))))
+    (zfs-dataset pool path)))
+
 ;; Note: This module is used both on the build side and on the host side.
 ;; Arrange not to pull (guix store) and (guix config) because the latter
 ;; differs from user to user.
@@ -289,7 +298,7 @@ For example:
 (define (file-name-depth file-name)
   (length (string-tokenize file-name %not-slash)))
 
-(define* (file-system-device->string device #:key uuid-type)
+(define* (file-system-device->string device #:key uuid-type kernel-argument?)
   "Return the string representations of the DEVICE field of a <file-system>
 record.  When the device is a UUID, its representation is chosen depending on
 UUID-TYPE, a symbol such as 'dce or 'iso9660."
@@ -301,7 +310,10 @@ UUID-TYPE, a symbol such as 'dce or 'iso9660."
          (uuid->string (uuid-bytevector device) uuid-type)
          (uuid->string device)))
     ((? zfs-dataset?)
-     (zfs-dataset->string device))
+     (let ((str (zfs-dataset->string device)))
+       (if kernel-argument?
+           (string-append "zfs:" str)
+           str)))
     ((? string?)
      device)))
 
@@ -667,18 +679,19 @@ system has the given MOUNT-POINT."
 
 
 ;;;
-;;; Btrfs specific helpers.
+;;; Btrfs and ZFS helpers.  TODO: Refactor
 ;;;
 
 (define (btrfs-subvolume? fs)
   "Predicate to check if FS, a file-system object, is a Btrfs subvolume."
-  (and-let* ((btrfs-file-system? (string= "btrfs" (file-system-type fs)))
-             (option-keys (map (match-lambda
-                                 ((key . value) key)
-                                 (key key))
-                               (file-system-options->alist
-                                (file-system-options fs)))))
-    (find (cut string-prefix? "subvol" <>) option-keys)))
+  (or (and-let* ((btrfs-file-system? (string= "btrfs" (file-system-type fs)))
+                 (option-keys (map (match-lambda
+                                     ((key . value) key)
+                                     (key key))
+                                   (file-system-options->alist
+                                    (file-system-options fs)))))
+        (find (cut string-prefix? "subvol" <>) option-keys))
+      (zfs-dataset? (file-system-device fs))))
 
 (define (btrfs-store-subvolume-file-name file-systems)
   "Return the subvolume file name within the Btrfs top level onto which the
@@ -704,6 +717,9 @@ store is located, else #f."
     ;; XXX: Deriving the subvolume name based from a subvolume ID is not
     ;; supported, as we'd need to query the actual file system.
     (or (and=> (assoc-ref options "subvol") prepend-slash/maybe)
+        (let ((dataset (file-system-device store-subvolume-fs)))
+          (and (zfs-dataset? dataset)
+               (string-append "/" (zfs-dataset-path dataset) "@")))
         (raise (condition
                 (&message
                  (message "The store is on a Btrfs subvolume, but the \

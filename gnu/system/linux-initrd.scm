@@ -241,11 +241,22 @@ upon error."
     ;; File systems like btrfs need help to assemble multi-device file systems
     ;; but do not use manually-specified <mapped-devices>.
     (let ((file-system-types (map file-system-type file-systems)))
-      (if (member "btrfs" file-system-types)
-          ;; Ignore errors: if the system manages to boot anyway, the better.
-          #~((system* (string-append #$btrfs-progs/static "/bin/btrfs")
-                      "device" "scan"))
-          #~())))
+      (append
+       (if (member "btrfs" file-system-types)
+           ;; Ignore errors: if the system manages to boot anyway, the better.
+           (list #~(system* (string-append #$btrfs-progs/static "/bin/btrfs")
+                            "device" "scan"))
+           '())
+       (map (lambda (zpool)
+              #~(begin
+                  (system* #$(file-append zfs "/sbin/zpool") "import"
+                           "-N" #$zpool)
+                  (system* #$(file-append zfs "/sbin/zfs") "load-key"
+                           "-r" #$zpool)))
+            (delete-duplicates
+             (map (compose zfs-dataset-pool file-system-device)
+                  (filter (compose zfs-dataset? file-system-device)
+                          file-systems)))))))
 
   (define kodir
     (flat-linux-module-directory linux linux-modules))
@@ -355,6 +366,7 @@ FILE-SYSTEMS."
                     ("jfs" => '("jfs"))
                     ("f2fs" => '("f2fs" "crc32_cryptoapi"))
                     ("xfs" => '("xfs"))
+                    ("zfs" => '("zfs" "spl"))
                     (else '())))
 
 (define (file-system-modules file-systems)

@@ -709,6 +709,8 @@ checking this by themselves in their 'check' procedure."
       (match device
         ((? string?)
          device)
+        ((? zfs-dataset?)
+         "/dev/zfs")
         ((? uuid?)
          (find-partition-by-uuid device))
         ((? file-system-label?)

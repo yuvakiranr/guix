@@ -206,7 +206,8 @@ VERSION is the target version of the boot-parameters record."
   ;; generations.
   (define version>0? (> version 0))
   (let ((root (file-system-device->string root-device
-                                          #:uuid-type 'dce)))
+                                          #:uuid-type 'dce
+                                          #:kernel-argument? #t)))
     (append
      (cond
       ((string=? root "tmpfs")
@@ -243,7 +244,7 @@ VERSION is the target version of the boot-parameters record."
   operating-system?
   this-operating-system
 
-  (kernel operating-system-kernel                 ; package
+  (kernel %operating-system-kernel                ; package
           (default linux-libre))
   (kernel-loadable-modules operating-system-kernel-loadable-modules
                     (default '()))                ; list of packages
@@ -328,6 +329,33 @@ VERSION is the target version of the boot-parameters record."
             (default (and=> (current-source-location)
                             source-properties->location))
             (innate)))
+
+(define (operating-system-kernel os)
+  (define kernel
+    (%operating-system-kernel os))
+
+  (define file-systems
+    (filter (lambda (fs)
+              (string=? "zfs" (file-system-type fs)))
+            (operating-system-file-systems os)))
+
+  (define booting-from-zfs?
+    (any file-system-needed-for-boot? file-systems))
+
+  (define configured-zfs-service
+    (find (lambda (s)
+            (eq? zfs-service-type (service-kind s)))
+          (operating-system-user-services os)))
+
+  (define configured-zfs-package
+    (and=> configured-zfs-service
+           (compose zfs-configuration-zfs service-value)))
+
+  (if booting-from-zfs?
+      (if configured-zfs-package
+          (linux-with-zfs kernel configured-zfs-package)
+          (linux-with-zfs kernel))
+      kernel))
 
 (define-deprecated (operating-system-hosts-file os)
   hosts-service-type
@@ -432,6 +460,8 @@ file system labels."
        (bytevector->uuid bv type))
       (('file-system-label (? string? label))
        (file-system-label label))
+      (('zfs-dataset (? string? pool) path)
+       (zfs-dataset pool path))
       ((? bytevector? bv)                         ;old format
        (bytevector->uuid bv 'dce))
       ((? string? device)
@@ -656,15 +686,28 @@ utilities for the file systems marked as 'needed-for-boot' in OS."
               (string=? "zfs" (file-system-type fs)))
             (operating-system-file-systems os)))
 
+  (define booting-from-zfs?
+    (any file-system-needed-for-boot? file-systems))
+
   (define configured-zfs-service
     (find (lambda (s)
             (eq? zfs-service-type (service-kind s)))
           (operating-system-user-services os)))
 
+  (and configured-zfs-service
+       booting-from-zfs?
+       (not (zfs-configuration-kernel-has-zfs-module?
+             (service-value configured-zfs-service)))
+       (leave (G_ "'~a': '~a' is required for booting from ZFS~%")
+              "zfs-configuration"
+              "kernel-has-zfs-module?"))
+
   (if (or (null? file-systems)
           configured-zfs-service)
       '()
-      (list (service zfs-service-type))))
+      (list (service zfs-service-type
+              (zfs-configuration
+                (kernel-has-zfs-module? booting-from-zfs?))))))
 
 (define (mapped-device-users device file-systems)
   "Return the subset of FILE-SYSTEMS that use DEVICE."
@@ -1644,6 +1687,8 @@ susceptible to introduce a cyclic dependency."
      `(uuid ,(uuid-type uuid) ,(uuid-bytevector uuid)))
     ((? file-system-label? label)
      `(file-system-label ,(file-system-label->string label)))
+    ((? zfs-dataset? dataset)
+     `(zfs-dataset ,(zfs-dataset-pool dataset) ,(zfs-dataset-path dataset)))
     (_
      device)))
 
