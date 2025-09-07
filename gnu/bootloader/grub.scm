@@ -334,6 +334,9 @@ code."
         ((? file-system-label? label)
          (format #f "search --label --set ~a"
                  (file-system-label->string label)))
+        ((? zfs-dataset? dataset)
+         (format #f "search --label --set ~a"
+                 (zfs-dataset->string dataset)))
         ((? (lambda (device)
               (and (string? device) (string-contains device ":/"))) nfs-uri)
          ;; If the device is an NFS share, then we assume that the expected
