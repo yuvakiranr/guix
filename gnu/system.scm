@@ -206,7 +206,8 @@ VERSION is the target version of the boot-parameters record."
   ;; generations.
   (define version>0? (> version 0))
   (let ((root (file-system-device->string root-device
-                                          #:uuid-type 'dce)))
+                                          #:uuid-type 'dce
+                                          #:kernel-argument? #t)))
     (append
      (cond
       ((string=? root "tmpfs")
@@ -433,6 +434,8 @@ file system labels."
        (bytevector->uuid bv type))
       (('file-system-label (? string? label))
        (file-system-label label))
+      (('zfs-dataset (? string? pool) path)
+       (zfs-dataset pool path))
       ((? bytevector? bv)                         ;old format
        (bytevector->uuid bv 'dce))
       ((? string? device)
@@ -1641,6 +1644,8 @@ susceptible to introduce a cyclic dependency."
      `(uuid ,(uuid-type uuid) ,(uuid-bytevector uuid)))
     ((? file-system-label? label)
      `(file-system-label ,(file-system-label->string label)))
+    ((? zfs-dataset? dataset)
+     `(zfs-dataset ,(zfs-dataset-pool dataset) ,(zfs-dataset-path dataset)))
     (_
      device)))
 
