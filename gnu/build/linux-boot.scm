@@ -542,6 +542,8 @@ upon error."
     ;; So check for all four.
     (cond ((string-prefix? "/" device-string) device-string)
           ((string-contains device-string ":/") device-string) ; nfs-root
+          ((string-prefix? "zfs:" device-string)
+           (string->zfs-dataset (string-drop device-string 4)))
           ((uuid device-string) => identity)
           (else (file-system-label device-string))))
 

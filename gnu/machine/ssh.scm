@@ -337,6 +337,7 @@ not available in the initrd."
 
               (define dev
                 #$(cond ((string? device) device)
+                        ((zfs-dataset? device) "/dev/zfs")
                         ((uuid? device) #~(find-partition-by-uuid
                                            (string->uuid
                                             #$(uuid->string device))))
