@@ -11,6 +11,7 @@
 ;;; Copyright © 2026 Giacomo Leidi <therewasa@fishinthecalculator.me>
 ;;; Copyright © 2026 Joan Vilardaga Castro <codeberg-hn80@joanvc.cat>
 ;;; Copyright © 2026 Arjan Adriaanse <arjan@adriaan.se>
+;;; Copyright © 2026 Hilton Chain <hako@ultrarare.space>
 ;;;
 ;;; This file is part of GNU Guix.
 ;;;
@@ -162,7 +163,10 @@
 
             vfs-mapping-service-type
             vfs-mapping-configuration
-            vfs-mapping))
+            vfs-mapping
+
+            zfs-configuration
+            zfs-service-type))
 
 
 ;;;
@@ -1375,3 +1379,91 @@ placed in a udev rules file."
                                 extensions)))))
    (default-value (vfs-mapping-configuration))
    (description "Share or expose a file name under a different name.")))
+
+
+;;;
+;;; ZFS
+;;;
+
+(define-configuration/no-serialization zfs-configuration
+  (zfs
+   (file-like zfs)
+   "The package to provide ZFS command-line utilities and udev rules.")
+  (auto-mount?
+   (boolean #t)
+   "Auto-mount ZFS datasets.")
+  (volumes?
+   (boolean #t)
+   "Wait for ZFS volumes to show up."))
+
+(define zfs-linux-loadable-module-service
+  (match-record-lambda <zfs-configuration>
+      (zfs)
+    (list `(,zfs "module"))))
+
+(define zfs-shepherd-service
+  (match-record-lambda <zfs-configuration>
+      (zfs volumes? auto-mount?)
+    (let ((zfs-mount-shepherd-service
+           (shepherd-service
+             (documentation "Mount all available ZFS file systems.")
+             (provision '(zfs-mount))
+             (requirement '(zfs-import))
+             (start
+              #~(make-system-constructor
+                 (string-join
+                  (list #$(file-append zfs "/sbin/zfs") "mount" "-a" "-l"))))
+             (stop
+              #~(make-system-destructor
+                 (string-join
+                  (list #$(file-append zfs "/sbin/zfs") "unmount" "-a"))))))
+          (zfs-volumes-shepherd-service
+           (shepherd-service
+             (documentation "Wait for ZFS volume links to appear in /dev.")
+             (provision '(zfs-volumes))
+             (requirement '(zfs-import))
+             (start
+              #~(make-system-constructor
+                 (string-join
+                  ;; TODO: Patch references within zfs package instead.
+                  (list "PATH=/run/current-system/profile/bin:/run/current-system/profile/sbin"
+                        #$(file-append zfs "/bin/zvol_wait")))))
+             (stop #~(const #f)))))
+      (append
+       (if auto-mount? (list zfs-mount-shepherd-service)   '())
+       (if volumes?    (list zfs-volumes-shepherd-service) '())
+       (list (shepherd-service
+               (documentation "Import ZFS storage pools.")
+               (provision '(zfs-import))
+               (requirement '(udev))
+               (start
+                #~(make-system-constructor
+                   (string-join
+                    (list #$(file-append zfs "/sbin/zpool") "import" "-a" "-N"))))
+               (stop #~(const #f)))
+             (shepherd-service
+               (documentation "Take care of ZFS file systems.")
+               (provision '(file-system-zfs))
+               (requirement
+                `(zfs-import
+                  ,@(if auto-mount? '(zfs-mount)   '())
+                  ,@(if volumes?    '(zfs-volumes) '())))
+               (start #~(const #t))
+               (stop #~(const #f))))))))
+
+(define zfs-service-type
+  (service-type
+    (name 'zfs)
+    (extensions
+     (list (service-extension profile-service-type
+                              (compose list zfs-configuration-zfs))
+           (service-extension linux-loadable-module-service-type
+                              zfs-linux-loadable-module-service)
+           (service-extension udev-service-type
+                              (compose list zfs-configuration-zfs))
+           (service-extension shepherd-root-service-type
+                              zfs-shepherd-service)
+           (service-extension file-system-service-type
+                              (const '(file-system-zfs)))))
+    (default-value (zfs-configuration))
+    (description "")))

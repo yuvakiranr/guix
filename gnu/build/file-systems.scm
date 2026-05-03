@@ -1275,6 +1275,8 @@ file name or an nfs-root containing ':/')."
          ;; Do not resolve NFS / CIFS / tmpfs devices
          ;; or bcachefs multi-device specifications.
          spec))
+    ((? zfs-dataset?)
+     (zfs-dataset->string spec))
     ((? file-system-label?)
      ;; Resolve the label.
      (resolve find-partition-by-label

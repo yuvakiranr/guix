@@ -84,7 +84,7 @@
   #:use-module ((gnu packages disk)
                 #:select (dosfstools))
   #:use-module ((gnu packages file-systems)
-                #:select (bcachefs-tools exfat-utils jfsutils zfs))
+                #:select (bcachefs-tools exfat-utils jfsutils))
   #:use-module (gnu packages fonts)
   #:use-module ((gnu packages nwg-shell) #:select (nwg-hello))
   #:use-module (gnu packages terminals)
@@ -343,6 +343,8 @@
                                    (file-system-label->string label)))
                    ((? uuid? uuid)
                     (string-append "UUID=" (uuid->string uuid)))
+                   ((? zfs-dataset? dataset)
+                    (zfs-dataset->string dataset))
                    ((? string? device)
                     device))
                  "\t"
@@ -602,6 +604,7 @@ upon boot."
   "Return the package providing the utilities for file system TYPE, #f
 otherwise."
   (assoc-ref
+   ;; ZFS is handled by zfs-service-type.
    `(("bcachefs" . ,bcachefs-tools)
      ("btrfs" . ,btrfs-progs)
      ("exfat" . ,exfat-utils)
@@ -612,8 +615,7 @@ otherwise."
      ("f2fs" . ,f2fs-tools)
      ("jfs" . ,jfsutils)
      ("vfat" . ,dosfstools)
-     ("xfs" . ,xfsprogs)
-     ("zfs" . ,zfs))
+     ("xfs" . ,xfsprogs))
    type))
 
 (define (file-system-utilities file-systems)
