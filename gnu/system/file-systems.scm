@@ -62,6 +62,12 @@
 
             file-system-type-predicate
             file-system-mount-point-predicate
+
+            zfs-dataset?
+            zfs-dataset-pool
+            zfs-dataset-path
+            zfs-dataset
+            zfs-dataset->string
             btrfs-subvolume?
             btrfs-store-subvolume-file-name
 
@@ -203,6 +209,28 @@ flags are found."
                             (format port "#<file-system-label ~s>"
                                     (file-system-label->string obj))))
 
+;; ZFS dataset representation for use in the 'device' field.
+(define-record-type <zfs-dataset>
+  (%zfs-dataset pool path)
+  zfs-dataset?
+  (pool zfs-dataset-pool)
+  (path zfs-dataset-path))
+
+(set-record-type-printer! <zfs-dataset>
+                          (lambda (obj port)
+                            (format port "#<zfs-dataset ~s>"
+                                    (zfs-dataset->string obj))))
+
+(define* (zfs-dataset pool #:optional path)
+  (%zfs-dataset pool path))
+
+(define (zfs-dataset->string dataset)
+  (let ((pool (zfs-dataset-pool dataset))
+        (path (zfs-dataset-path dataset)))
+    (if path
+        (string-append pool "/" path)
+        pool)))
+
 ;; Note: This module is used both on the build side and on the host side.
 ;; Arrange not to pull (guix store) and (guix config) because the latter
 ;; differs from user to user.
@@ -272,6 +300,8 @@ UUID-TYPE, a symbol such as 'dce or 'iso9660."
      (if uuid-type
          (uuid->string (uuid-bytevector device) uuid-type)
          (uuid->string device)))
+    ((? zfs-dataset?)
+     (zfs-dataset->string device))
     ((? string?)
      device)))
 
@@ -325,6 +355,8 @@ initrd code."
                   `(uuid ,(uuid-type device) ,(uuid-bytevector device)))
                  ((file-system-label? device)
                   `(file-system-label ,(file-system-label->string device)))
+                 ((zfs-dataset? device)
+                  `(zfs-dataset ,(zfs-dataset-pool device) ,(zfs-dataset-path device)))
                  (else device))
            mount-point type flags options mount-may-fail?
            check? skip-check-if-clean? repair))))
@@ -341,6 +373,8 @@ initrd code."
                   (bytevector->uuid bv type))
                  (('file-system-label (? string? label))
                   (file-system-label label))
+                 (('zfs-dataset (? string? pool) path)
+                  (zfs-dataset pool path))
                  (_
                   device)))
        (mount-point mount-point) (type type)

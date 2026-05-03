@@ -22,6 +22,7 @@
 (define-module (gnu machine ssh)
   #:use-module (gnu bootloader)
   #:use-module (gnu machine)
+  #:autoload   (gnu packages file-systems) (zfs)
   #:autoload   (gnu packages gnupg) (guile-gcrypt)
   #:use-module (gnu system)
   #:use-module (gnu system file-systems)
@@ -257,6 +258,22 @@ exist on the machine."
                                   (file-system-label->string
                                    (file-system-device fs)))))))
 
+  (define (check-zfs-dataset fs)
+    (define dataset
+      (zfs-dataset->string (file-system-device fs)))
+
+    (define remote-exp
+      (with-imported-modules (source-module-closure '((guix build utils)))
+        #~(begin
+            (use-modules (guix build utils))
+            (false-if-exception
+             (invoke #$(file-append zfs "/sbin/zfs") "list" #$dataset)))))
+
+    (remote-let ((result remote-exp))
+      (unless result
+        (raise (formatted-message (G_ "ZFS dataset '~a' not found~%")
+                                  dataset)))))
+
   (define (check-uuid-file-system fs)
     (define remote-exp
       (with-imported-modules (source-module-closure
@@ -284,6 +301,10 @@ exist on the machine."
               (map check-labeled-file-system
                    (filter (lambda (fs)
                              (file-system-label? (file-system-device fs)))
+                           file-systems))
+              (map check-zfs-dataset
+                   (filter (lambda (fs)
+                             (zfs-dataset? (file-system-device fs)))
                            file-systems))
               (map check-uuid-file-system
                    (filter (lambda (fs)
