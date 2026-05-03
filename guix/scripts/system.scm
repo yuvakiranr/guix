@@ -614,6 +614,11 @@ any, are available.  Raise an error if they're not."
               (string? (file-system-device fs)))
             relevant))
 
+  (define zfs-datasets
+    (filter (lambda (fs)
+              (zfs-dataset? (file-system-device fs)))
+            relevant))
+
   (define uuid
     (filter (lambda (fs)
               (uuid? (file-system-device fs)))
@@ -653,6 +658,14 @@ label, write @code{(file-system-label ~s)} in your @code{device} field.")
                            (G_ "file system with label '~a' not found~%")
                            label))))
               labeled)
+    (for-each (lambda (fs)
+                (let ((dataset (zfs-dataset->string (file-system-device fs))))
+                  (unless (false-if-exception
+                           (invoke/quiet "zfs" "list" dataset))
+                    (error (file-system-location* fs)
+                           (G_ "ZFS dataset '~a' not found~%")
+                           dataset))))
+              zfs-datasets)
     (for-each (lambda (fs)
                 (unless (find-partition-by-uuid (file-system-device fs))
                   (error (file-system-location* fs)

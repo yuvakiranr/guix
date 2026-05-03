@@ -70,6 +70,7 @@
   #:use-module (gnu services)
   #:use-module (gnu services shepherd)
   #:use-module (gnu services base)
+  #:use-module (gnu services file-systems)
   #:use-module (gnu bootloader)
   #:use-module (gnu system shadow)
   #:use-module (gnu system nss)
@@ -649,6 +650,22 @@ utilities for the file systems marked as 'needed-for-boot' in OS."
     (simple-service 'boot-file-system-utilities profile-service-type
                     (file-system-utilities file-systems))))
 
+(define (zfs-service os)
+  (define file-systems
+    (filter (lambda (fs)
+              (string=? "zfs" (file-system-type fs)))
+            (operating-system-file-systems os)))
+
+  (define configured-zfs-service
+    (find (lambda (s)
+            (eq? zfs-service-type (service-kind s)))
+          (operating-system-user-services os)))
+
+  (if (or (null? file-systems)
+          configured-zfs-service)
+      '()
+      (list (service zfs-service-type))))
+
 (define (mapped-device-users device file-systems)
   "Return the subset of FILE-SYSTEMS that use DEVICE."
   (let ((targets (map (cut string-append "/dev/mapper/" <>)
@@ -798,6 +815,7 @@ bookkeeping."
          (root-fs      (root-file-system-service))
          (boot-fs      (boot-file-system-service os))
          (non-boot-fs  (non-boot-file-system-service os))
+         (zfs          (zfs-service os))
          (swaps        (swap-services os))
          (procs        (service user-processes-service-type))
          (host-name    (operating-system-host-name os))
@@ -844,7 +862,7 @@ bookkeeping."
            (service profile-service-type
                     (operating-system-packages os))
            boot-fs non-boot-fs
-           (append mappings swaps
+           (append zfs mappings swaps
 
                    ;; Add the firmware service.
                    (list %linux-bare-metal-service

@@ -156,6 +156,7 @@ environment with the store shared with the host.  MAPPINGS is a list of
                 (or (string=? target "/")
                     (and (string? source)
                          (string-prefix? "/dev/" source))
+                    (zfs-dataset? source)
 
                     ;; Labels and UUIDs are necessarily invalid in the VM.
                     (and (file-system-mount? fs)
