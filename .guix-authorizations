@@ -128,4 +128,7 @@
   ("7EBE A494 60CE 5E2C 0875  7FDB 3B5A A993 E1A2 DFF0"
    (name "z572"))
   ("705A 29B7 01EE 410E B6F9  236E 92F1 D22C 608E E7E5"
-   (name "zimoun"))))
+   (name "zimoun"))
+  (;; primary: "9B10 37FF 593A FD81 D1E8  4FDA C64A 1857 6EA2 7D1C"
+   "8FF6 C587 7762 7164 AF0B  38B5 19DA 0943 76F1 00CB"
+   (name "yuvakiranr"))))
