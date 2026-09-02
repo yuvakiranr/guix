@@ -59,8 +59,7 @@
   #:use-module (gnu system file-systems)          ; 'file-system', etc.
   #:use-module (gnu system keyboard)
   #:use-module (gnu system mapped-devices)
-  #:use-module ((gnu system linux-initrd)
-                #:select (file-system-packages))
+  #:autoload (gnu system linux-initrd) (file-system-packages)
   #:use-module (gnu packages admin)
   #:use-module ((gnu packages linux)
                 #:select (alsa-utils btrfs-progs crda eudev
@@ -640,7 +639,6 @@ FILE-SYSTEMS."
 file systems, as well as corresponding @file{/etc/fstab} entries.")))
 
 
-
 ;;;
 ;;; Preserve entropy to seed /dev/urandom on boot.
 ;;;
