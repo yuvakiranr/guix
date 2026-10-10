@@ -106,6 +106,7 @@
   #:use-module (srfi srfi-26)
   #:use-module (srfi srfi-34)
   #:use-module (srfi srfi-35)
+  #:use-module (srfi srfi-71)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
   #:use-module (ice-9 pretty-print)
@@ -515,24 +516,29 @@ upon boot."
 
 (define (file-system-shepherd-services file-systems)
   "Return the list of Shepherd services for FILE-SYSTEMS."
-  (let* ((file-systems (filter (lambda (x)
-                                 (or (file-system-mount? x)
-                                     (file-system-create-mount-point? x)))
-                               file-systems)))
+  (let* ((extra-requirements
+          file-systems
+          (partition symbol? file-systems))
+         (file-systems
+          (filter (lambda (x)
+                    (or (file-system-mount? x)
+                        (file-system-create-mount-point? x)))
+                  file-systems)))
 
     (define sink
       (shepherd-service
        (provision '(file-systems))
-       (requirement (cons* 'root-file-system
-                           (map file-system->shepherd-service-name
-                                ;; Do not require file systems with Shepherd
-                                ;; requirements to provision
-                                ;; 'file-systems. Many Shepherd services
-                                ;; require 'file-systems, so we would likely
-                                ;; deadlock.
-                                (filter (lambda (file-system)
-                                          (null? (file-system-shepherd-requirements file-system)))
-                                        file-systems))))
+       (requirement (append '(root-file-system)
+                            (map file-system->shepherd-service-name
+                                 ;; Do not require file systems with Shepherd
+                                 ;; requirements to provision
+                                 ;; 'file-systems. Many Shepherd services
+                                 ;; require 'file-systems, so we would likely
+                                 ;; deadlock.
+                                 (filter (lambda (file-system)
+                                           (null? (file-system-shepherd-requirements file-system)))
+                                         file-systems))
+                            extra-requirements))
        (documentation "Target for all the initially-mounted file systems")
        (start #~(const #t))
        (stop #~(const #f))))
@@ -617,15 +623,21 @@ FILE-SYSTEMS."
                 (file-system-type->utilities (file-system-type file-system)))
               file-systems))
 
+(define (strip-symbol-extensions proc)
+  (lambda (x)
+    (proc (remove symbol? x))))
+
 (define file-system-service-type
   (service-type (name 'file-systems)
                 (extensions
                  (list (service-extension shepherd-root-service-type
                                           file-system-shepherd-services)
                        (service-extension fstab-service-type
-                                          file-system-fstab-entries)
+                                          (strip-symbol-extensions
+                                           file-system-fstab-entries))
                        (service-extension profile-service-type
-                                          file-system-utilities)
+                                          (strip-symbol-extensions
+                                           file-system-utilities))
 
                        ;; Have 'user-processes' depend on 'file-systems'.
                        (service-extension user-processes-service-type
